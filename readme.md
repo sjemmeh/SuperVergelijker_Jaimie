@@ -49,7 +49,7 @@ De eerste keer wordt automatisch een virtuele omgeving aangemaakt en de benodigd
 ## ⚙️ .env voorbeeld
 
 Zorg dat er in `src/.env` een bestand staat met de volgende inhoud:
-```json
+```
 BUDGETGAMING_API_KEY=JouwAPIKey
 BUDGETGAMING_STORE_ID=JouwStoreID
 STORE_URL=https://www.budgetgaming.nl/budgetgamingfeed.php
