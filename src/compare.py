@@ -37,7 +37,7 @@ def _select_file(caption: str, files: List[Path]) -> Optional[Path]:
     return files[int(choice) - 1]
 
 
-def _load_prijzen(path: Path) -> pd.DataFrame:
+def _load_prices(path: Path) -> pd.DataFrame:
     """
     Loads price data from a CSV file into a Pandas DataFrame.
 
@@ -81,13 +81,13 @@ def _parse_magento_export(path: Path) -> pd.DataFrame:
 
     df = pd.DataFrame({
         "catalog_product_attribute.sku": skus,
-        "prijs_magento": prijzen_magento
+        "huidige_prijs_magento": prijzen_magento
     })
     df["ean"] = df["catalog_product_attribute.sku"].str[:-1].str.strip()
     df["type"] = df["catalog_product_attribute.sku"].str[-1].str.upper()
     return df
 
-def _vergelijk_prijzen(magento: pd.DataFrame, prijzen: pd.DataFrame) -> pd.DataFrame:
+def _compare_prices(magento: pd.DataFrame, prijzen: pd.DataFrame) -> pd.DataFrame:
     """
     Compares Magento prices with the lowest prices from the price file.
 
@@ -103,9 +103,14 @@ def _vergelijk_prijzen(magento: pd.DataFrame, prijzen: pd.DataFrame) -> pd.DataF
     for col in ("laagsteprijs", "laagsteprijstweedehands"):
         merged[col] = pd.to_numeric(merged[col], errors="coerce")
     # Calculate the minimum of the lowest new and second-hand prices
-    merged["min_laagste"] = merged[["laagsteprijs", "laagsteprijstweedehands"]].min(axis=1)
+    merged["min_laagste"] = merged.apply(
+    lambda row: row["laagsteprijs"] if row["type"] == "N"
+    else row["laagsteprijstweedehands"] if row["type"] == "G"
+    else None,
+    axis=1
+)
     # Calculate the price difference
-    merged["prijsverschil"] = merged["prijs_magento"] - merged["min_laagste"]
+    merged["prijsverschil"] = merged["huidige_prijs_magento"] - merged["min_laagste"]
     # Filter for valid lowest prices and positive price differences
     return merged[(~merged["min_laagste"].isna()) & (merged["prijsverschil"] > 0)].copy()
 
@@ -129,12 +134,12 @@ def _export_aanbiedingen(df: pd.DataFrame, naam_basis: str) -> None:
         "titel",
         "min_laagste",
         "console",
-        "prijs_magento"
+        "huidige_prijs_magento"
     ]
     df[kolommen].to_csv(export_path, sep=";", index=False) # Save to CSV
     print(f"\n📂 Aanbiedingen opgeslagen in: {export_path}") # Deals saved in:
 
-def run_vergelijken() -> None:
+def run_compare() -> None:
     """
     Main function to run the price comparison process.
     It guides the user through selecting files, performs the comparison,
@@ -143,8 +148,8 @@ def run_vergelijken() -> None:
     _print_titel("📊 Vergelijk Magento-export met prijsbestand") # Compare Magento export with price file
     project_root = Path(__file__).resolve().parent.parent
     # Select the result file (containing BudgetGaming prices)
-    resultaat_path = _select_file("📄 Kies resultaatbestand:", sorted((project_root / "resultaat").glob("*.csv"))) # Choose result file:
-    if not resultaat_path:
+    result_path = _select_file("📄 Kies resultaatbestand:", sorted((project_root / "resultaat").glob("*.csv"))) # Choose result file:
+    if not result_path:
         input("Druk op Enter om terug te keren...") # Press Enter to return...
         return
 
@@ -156,28 +161,20 @@ def run_vergelijken() -> None:
 
     try:
         # Load and parse dataframes
-        prijzen_df = _load_prijzen(resultaat_path)
+        prijzen_df = _load_prices(result_path)
         magento_df = _parse_magento_export(magento_path)
         # Perform price comparison
-        aanbiedingen_df = _vergelijk_prijzen(magento_df, prijzen_df)
+        price_drop_offers_df = _compare_prices(magento_df, prijzen_df)
     except Exception as exc:
         print(f"❌ Fout tijdens verwerking: {exc}") # Error during processing:
         input("Druk op Enter om terug te keren...") # Press Enter to return...
         return
 
-    if aanbiedingen_df.empty:
+    if price_drop_offers_df.empty:
         print("\nℹ️ Geen prijsdalingen gevonden.") # No price drops found.
     else:
-        _print_titel(f"📋 {len(aanbiedingen_df)} aanbiedingen gevonden:") # offers found:
-        # Display the found deals
-        print(aanbiedingen_df[[
-            "catalog_product_attribute.sku",
-            "titel",
-            "min_laagste",
-            "console",
-            "prijs_magento"
-        ]].to_string(index=False))
+        _print_titel(f"📋 {len(price_drop_offers_df)} prijsdalingen gevonden:") # offers found:
         # Export the deals to a CSV file
-        _export_aanbiedingen(aanbiedingen_df, resultaat_path.stem)
+        _export_aanbiedingen(price_drop_offers_df, result_path.stem)
 
     input("\n📅 Vergelijking voltooid. Druk op Enter om terug te keren...") # Comparison completed. Press Enter to return...

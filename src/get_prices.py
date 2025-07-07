@@ -7,6 +7,8 @@ from dotenv import load_dotenv
 from datetime import datetime
 from colorama import Fore, Style, init
 
+from main import set_console_title
+
 def run_get():
     """
     Main function to fetch price data from BudgetGaming.nl.
@@ -158,6 +160,7 @@ def fetch_all_data(systems, api_key, store_id, store_url, user_agent, content_ty
     for system in tqdm(systems, desc="📡 Consoles ophalen", unit="console"): # Fetching consoles
         url = base_url + system
         try:
+            set_console_title("Ophalen van prijzen voor " + system) # Fetching prices for {system}
             response = requests.get(url, headers=headers, timeout=10) # Make GET request
             response.raise_for_status() # Raise an exception for HTTP errors
 
