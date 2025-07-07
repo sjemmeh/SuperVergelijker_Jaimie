@@ -15,7 +15,7 @@ Een script om automatisch prijzen op te halen van BudgetGaming.nl en deze te ver
 
 ## 📁 Structuur
 
-SuperVergelijker_Jaimie/
+```SuperVergelijker_Jaimie/
 ├── resultaat/ # Hier komen je CSV-bestanden
 ├── src/
 │ ├── get_prices.py # Ophalen van prijzen
@@ -26,7 +26,7 @@ SuperVergelijker_Jaimie/
 │ ├── requirements.txt
 │ └── vergelijker_env/ # Virtuele omgeving (automatisch aangemaakt)
 ├── start.bat # Start het programma (Windows)
-
+```
 
 ---
 
