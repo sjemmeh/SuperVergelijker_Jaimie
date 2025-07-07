@@ -15,7 +15,8 @@ Een script om automatisch prijzen op te halen van BudgetGaming.nl en deze te ver
 
 ## 📁 Structuur
 
-```SuperVergelijker_Jaimie/
+```
+SuperVergelijker_Jaimie/
 ├── resultaat/ # Hier komen je CSV-bestanden
 ├── src/
 │ ├── get_prices.py # Ophalen van prijzen
