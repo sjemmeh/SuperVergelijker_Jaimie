@@ -16,16 +16,16 @@ Een script om automatisch prijzen op te halen van BudgetGaming.nl en deze te ver
 ## 📁 Structuur
 
 SuperVergelijker_Jaimie/
-├── resultaat/             # Hier komen je CSV-bestanden
+├── resultaat/ # Hier komen je CSV-bestanden
 ├── src/
-│   ├── get_prices.py      # Ophalen van prijzen
-│   ├── compare.py         # Vergelijken van prijzen
-│   ├── main.py            # Hoofdmenu
-│   ├── consoles.txt       # Lijst met consoles
-│   ├── .env               # API instellingen
-│   ├── requirements.txt
-│   └── vergelijker_env/   # Virtuele omgeving (automatisch aangemaakt)
-├── start.bat              # Start het programma (Windows)
+│ ├── get_prices.py # Ophalen van prijzen
+│ ├── compare.py # Vergelijken van prijzen
+│ ├── main.py # Hoofdmenu
+│ ├── consoles.txt # Lijst met consoles
+│ ├── .env # API instellingen
+│ ├── requirements.txt
+│ └── vergelijker_env/ # Virtuele omgeving (automatisch aangemaakt)
+├── start.bat # Start het programma (Windows)
 
 
 ---
