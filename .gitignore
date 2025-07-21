@@ -2,6 +2,7 @@
 /src/__pycache__
 /src/vergelijker_env
 /src/.env
-/resultaat/*
-/prijsdalingen/*
+/vergelijkingen/*
+/budgetgaming/*
 /*.csv
+/*.xlsx

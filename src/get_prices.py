@@ -128,26 +128,13 @@ def choose_consoles(all_systems):
             input("Druk op Enter om verder te gaan...") # Press Enter to continue...
     return list(selected)
 
-
 def fetch_all_data(systems, api_key, store_id, store_url, user_agent, content_type):
     """
-    Fetches price data for selected console systems from BudgetGaming.nl API.
-
-    Args:
-        systems: A list of console systems to fetch data for.
-        api_key: The API key for BudgetGaming.
-        store_id: The store ID for BudgetGaming.
-        store_url: The base URL of the BudgetGaming API.
-        user_agent: User-Agent header for the request.
-        content_type: Content-Type header for the request.
-
-    Returns:
-        A list of Pandas DataFrames, each containing data for a specific console.
+    Fetches and cleans price data for selected console systems from the BudgetGaming.nl API.
+    It now correctly handles the HTML-like response and structures the data.
     """
-    import io
     import requests
-    import pandas as pd
-    from tqdm import tqdm # For progress bar
+    from tqdm import tqdm
 
     base_url = f"{store_url}?page=budgetgamingfeed&winkel={store_id}&code={api_key}&console="
     headers = {
@@ -157,67 +144,101 @@ def fetch_all_data(systems, api_key, store_id, store_url, user_agent, content_ty
 
     all_data = []
 
-    for system in tqdm(systems, desc="📡 Consoles ophalen", unit="console"): # Fetching consoles
+    for system in tqdm(systems, desc="📡 Consoles ophalen", unit="console"):
         url = base_url + system
         try:
-            set_console_title("Ophalen van prijzen voor " + system) # Fetching prices for {system}
-            response = requests.get(url, headers=headers, timeout=10) # Make GET request
-            response.raise_for_status() # Raise an exception for HTTP errors
+            set_console_title(f"Ophalen van prijzen voor {system}")
+            response = requests.get(url, headers=headers, timeout=10)
+            response.raise_for_status()
 
-            if "<html" in response.text.lower():
-                print(f"\n⚠️  {system} overgeslagen: HTML ontvangen i.p.v. CSV.") # {system} skipped: HTML received instead of CSV.
+            body_content = response.text
+            if '<body>' in body_content.lower():
+                body_start_index = body_content.lower().find('<body>') + len('<body>')
+                body_end_index = body_content.lower().find('</body>', body_start_index)
+                if body_end_index == -1:
+                    body_end_index = len(body_content)
+                body_content = body_content[body_start_index:body_end_index]
+
+            lines = body_content.replace("&nbsp;", "").strip().split("<br>")
+            
+            # Skip empty lines and get header
+            lines = [line.strip() for line in lines if line.strip()]
+            if not lines:
+                print(f"\n⚠️  Geen data gevonden voor {system}.")
                 continue
 
-            # Clean up response text and read as CSV
-            text = response.text.replace("&nbsp", "").replace("<br>", "\n")
-            csv_data = io.StringIO(text)
-
-            try:
-                df = pd.read_csv(csv_data, sep=";", dtype=str, engine="python")
-                df["console"] = system # Add console name as a column
-                all_data.append(df)
-            except Exception as e:
-                print(f"\n❌ Fout bij inlezen CSV voor {system}: {e}") # Error reading CSV for {system}:
+            header = [h.strip().strip('"') for h in lines[0].split(';')]
+            
+            for line in lines[1:]:
+                fields = [field.strip().strip('"') for field in line.split(';')]
+                if len(fields) == len(header):
+                    row_data = dict(zip(header, fields))
+                    row_data['console'] = system
+                    all_data.append(row_data)
 
         except Exception as e:
-            print(f"\n❌ Fout bij ophalen van {system}: {e}") # Error fetching {system}:
+            print(f"\n❌ Fout bij ophalen van {system}: {e}")
 
     return all_data
 
-
 def save_results(all_data, systems, script_dir):
     """
-    Saves the fetched data to a CSV file in the 'resultaat' directory.
-
-    Args:
-        all_data: A list of DataFrames containing the fetched data.
-        systems: A list of console systems for which data was fetched.
-        script_dir: The directory where the script is located.
+    Saves the fetched and cleaned data to a CSV file in the 'budgetgaming' directory.
+    This version now intelligently deduplicates by keeping the entry with the lowest price.
     """
     import os
     import pandas as pd
+    import numpy as np
     from datetime import datetime
 
     if not all_data:
-        print("⚠️ Geen gegevens verzameld.") # No data collected.
+        print("⚠️ Geen gegevens verzameld.")
         return
 
-    df = pd.concat(all_data, ignore_index=True) # Concatenate all dataframes
-    # Select and reorder relevant columns
-    columns = ["titel", "console", "ean", "laagsteprijs", "laagsteprijstweedehands"]
-    df = df[columns]
+    df = pd.DataFrame(all_data)
 
-    # Remove rows where both 'titel' and 'ean' are missing
+    # --- Price Cleaning ---
+    prijs_kolommen = ['laagsteprijs', 'verzendkostennieuw', 'laagsteprijstweedehands', 'verzendkostentweedehands']
+    for col in prijs_kolommen:
+        if col in df.columns:
+            df[col] = df[col].astype(str).str.replace('.', '', regex=False).str.replace(',', '.')
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+        else:
+            df[col] = 0.0
+    df[prijs_kolommen] = df[prijs_kolommen].fillna(0.0)
+
+    # --- EAN Cleaning ---
+    df['ean'] = df['ean'].astype(str).str.replace(r'\D', '', regex=True).str.lstrip('0')
+    df.dropna(subset=['ean'], inplace=True)
+    df = df[df['ean'] != '']
+
+    # --- Deduplication ---
+    # Create a temporary column with the lowest price for sorting.
+    df['temp_min_price'] = df[['laagsteprijs', 'laagsteprijstweedehands']].min(axis=1)
+    # Sort by EAN and then by the lowest price, so the best price is first.
+    df.sort_values('temp_min_price', ascending=True, inplace=True)
+    # Drop duplicates, keeping the first entry (which now has the lowest price).
+    df.drop_duplicates(subset=['ean'], keep='first', inplace=True)
+    df.drop(columns=['temp_min_price'], inplace=True)
+
+    # --- Final Processing ---
+    df['laagsteprijs'] = (df['laagsteprijs'] - df['verzendkostennieuw']).round(2)
+    df['laagsteprijstweedehands'] = (df['laagsteprijstweedehands'] - df['verzendkostentweedehands']).round(2)
+
+    columns = ["titel", "console", "ean", "laagsteprijs", "laagsteprijstweedehands", "link"]
+    for col in columns:
+        if col not in df.columns:
+            df[col] = '' if col in ['titel', 'console', 'ean', 'link'] else 0.0
+
+    df = df[columns]
     df = df[~(df["titel"].isna() & df["ean"].isna())]
 
-    # Create filename based on selected consoles and current date
     consolenaam = "_".join(systems).replace(" ", "_").lower()
     datum = datetime.now().strftime("%d-%m-%Y")
 
-    # Define output directory and create if it doesn't exist
-    output_dir = os.path.abspath(os.path.join(script_dir, "..", "resultaat"))
+    output_dir = os.path.abspath(os.path.join(script_dir, "..", "budgetgaming"))
     os.makedirs(output_dir, exist_ok=True)
 
     filename = os.path.join(output_dir, f"{consolenaam}_{datum}.csv")
-    df.to_csv(filename, sep=";", index=False) # Save dataframe to CSV
-    print(f"\n✅ Bestand opgeslagen als: {filename}") # File saved as:
+    df.to_csv(filename, sep=";", index=False, decimal=',')
+    print(f"\n✅ Bestand opgeslagen als: {filename}")
